@@ -3,6 +3,8 @@ datetime
 folium
 ipython
 itables
+jupyter
+nbconvert
 jupyter-book
 logging
 matplotlib
