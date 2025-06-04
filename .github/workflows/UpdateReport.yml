@@ -1,33 +1,66 @@
 name: Update Report
+
 on:
   push:
     branches: [ master ]
   pull_request:
     branches: [ master ]
-  schedule: 
-    - cron: "0 */6 * * *" 
+  schedule:
+    - cron: "0 */6 * * *"
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-python@v5
-      with:
-        python-version: '3.10.14'
-        architecture: 'x64'
-    - name: Install library and other requirements
-      run: |
-        pip install jupyter nbconvert
-        pip install -r requirements.txt 
-    - name: Run Notebooks
-      env:
-        GH_TOKEN:  ${{ secrets.ORG_REPO_TOKEN }}
-      run: |
-        wget -q https://nvd.handsonhacking.org/nvd.jsonl 
-        jupyter nbconvert --ExecutePreprocessor.timeout=-1 --to notebook --inplace --execute NVDVulnStatus.ipynb
-    - name: Commit changes
-      uses: EndBug/add-and-commit@v9
-      with:
+      - uses: actions/checkout@v4
+
+      # Set up Python
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10.14'
+          architecture: 'x64'
+
+      # Cache pip dependencies for faster builds
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      # Install all requirements (should include jupyter, nbconvert, calplot, etc.)
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # Download latest NVD data
+      - name: Download latest NVD data
+        run: wget -q https://nvd.handsonhacking.org/nvd.jsonl
+
+      # Clear notebook outputs before execution
+      - name: Clear notebook outputs
+        run: |
+          pip install nbstripout
+          find . -name '*.ipynb' -exec nbstripout {} \;
+
+      # Execute all notebooks (NVDVulnStatus.ipynb, 2025.ipynb, etc.)
+      - name: Execute Notebooks
+        env:
+          GH_TOKEN: ${{ secrets.ORG_REPO_TOKEN }}
+        run: |
+          for nb in NVDVulnStatus.ipynb 2025.ipynb; do
+            if [ -f "$nb" ]; then
+              jupyter nbconvert --ExecutePreprocessor.timeout=-1 --to notebook --inplace --execute "$nb"
+            fi
+          done
+
+      # Commit changes if any notebooks were updated
+      - name: Commit changes
+        uses: EndBug/add-and-commit@v9
+        with:
           default_author: github_actions
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
